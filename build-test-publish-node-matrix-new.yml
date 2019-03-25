@@ -13,8 +13,12 @@ jobs:
   steps:
   - use: node
     version: $(node_version)
+  - restoreCache: package-lock.json
   - script: npm install
   - script: npm test
+  - saveCache:
+    key: package-lock.json
+    paths: node_modules
 
 - job: publish
   dependsOn: buildAndTest
