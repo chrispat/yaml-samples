@@ -31,4 +31,4 @@ These samples off how we're adding native CD concepts to the syntax
 Samples - build, test, and deploy a node service
 * [Simple script deployment](build-test-deploy-node-new.yml)
 * [Blue/green deployment](build-test-deploy-node-blue-green-new.yml)
-* [Blue/green using actions]()
+* [Blue/green using actions](build-test-deploy-node-blue-green-actions.yml)
