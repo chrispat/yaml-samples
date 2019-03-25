@@ -1,0 +1,77 @@
+stages:
+- stage: build
+  jobs:
+  - job: build
+    pool: 
+      vmImage: ubuntu-16.04
+    steps:
+    - use: node
+      version: 10.x
+    - script: npm install
+    - script: npm test
+    - script: zip -r app.zip .
+    - upload: app.zip
+
+- stage: staging
+  dependsOn: build
+  jobs:
+  - deployment: deploy-to-staging
+    environment: contoso-webapp-staging
+    pool:
+      vmImage: ubuntu-16.04
+    strategy:
+      runOnce:
+        deploy:
+        - task: AzureWebApp@1
+          inputs:
+            azureSubscription: 'node-app'
+            appType: 'webAppLinux'
+            appName: 'linuxmvptest19'
+            runtimeStack: 'NODE|10.1'
+            startUpCommand: 'npm run start'
+
+- stage: prod
+  dependsOn: staging
+  jobs:
+  - deployment: deploy-to-prod
+    environment: contoso-webapp-prod
+    pool:
+      vmImage: ubuntu-16.04
+    strategy:
+      blueGreen:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'node-app-parallel'
+              appType: 'webAppLinux'
+              appName: 'linuxparalleltest19'
+              runtimeStack: 'NODE|10.1'
+              startUpCommand: 'npm run start'
+              slot: staging
+              deployToSlotOrASE: true
+              resourceGroupName: linuxparallelrg
+        routeTraffic:
+          steps:
+          - task: AzureAppServiceManage@0
+            displayName: 'Swap Slots: foo'
+            inputs:
+              azureSubscription: 'node-app-parallel'
+              webAppName: webAppLinux
+              sourceSlot: staging
+              resourceGroupName: linuxparallelrg
+         postRouteTrafficChecks:
+          timeout: 60m
+          samplingInterval: 5m
+          steps:          
+          - task: appInsightsAlerts  
+         onFailure:
+          steps:
+          - task: AzureAppServiceManage@0
+            displayName: 'Swap Slots: foo'
+            inputs:
+              azureSubscription: 'node-app-parallel'
+              webAppName: webAppLinux
+              sourceSlot: production
+              targetSlot: staging
+              resourceGroupName: linuxparallelrg
