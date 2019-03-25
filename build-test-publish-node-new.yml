@@ -4,6 +4,10 @@ steps:
 - use: node
   version: 10.x
   auth: my-npm-registry-svc-connection
+- restoreCache: package-lock.json
 - script: npm install
 - script: npm test
 - script: npm publish
+- saveCache:
+  key: package-lock.json
+  paths: node_modules
