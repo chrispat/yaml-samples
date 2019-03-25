@@ -1,0 +1,102 @@
+stages:
+- stage: build
+  jobs:
+  - job: build
+    pool: 
+      vmImage: ubuntu-16.04
+    steps:
+    - use: node
+      version: 10.x
+    - script: npm install
+    - script: npm test
+    - script: zip -r app.zip .
+    - upload: app.zip
+
+- stage: staging
+  dependsOn: build
+  jobs:
+  - deployment: deploy-to-staging
+    environment: contoso-webapp-staging
+    pool:
+      vmImage: ubuntu-16.04
+    strategy:
+      runOnce:
+        deploy:
+        - action: azure/github-actions/login@master
+          displayName: Azure Login node-app-parallel
+          secrets:
+            - AZURE_SERVICE_APP_ID
+            - AZURE_SERVICE_PASSWORD
+            - AZURE_SERVICE_TENANT
+            
+        - action: azure/github-actions/webapp@master
+          displayName: Deploy WebApp linuxmvptest19
+          env:
+            AZURE_APP_NAME: linuxmvptest19
+            AZURE_APP_PACKAGE_LOCATION: app.zip
+
+- stage: prod
+  dependsOn: staging
+  jobs:
+  - deployment: deploy-to-prod
+    environment: contoso-webapp-prod
+    pool:
+      vmImage: ubuntu-16.04
+    strategy:
+      blueGreen:
+        deploy:
+          steps:
+          - action: azure/github-actions/login@master
+            displayName: Azure Login node-app-parallel
+            env:
+              AZURE_SUBSCRIPTION: node-app-parallel
+            secrets:
+            - AZURE_SERVICE_APP_ID
+            - AZURE_SERVICE_PASSWORD
+            - AZURE_SERVICE_TENANT
+            
+          - action: azure/github-actions/webapp@master
+            displayName: Deploy WebApp linuxparalleltest19
+            env:
+              AZURE_APP_NAME: linuxparalleltest19
+              AZURE_APP_PACKAGE_LOCATION: app.zip
+              RESOURCE_GROUP_NAME: linuxparallelrg
+              WEBAPP_TARGET_SLOT: staging
+
+        routeTraffic:
+          steps:
+          - action: azure/github-actions/login@master
+            displayName: Azure Login node-app-parallel
+            env:
+              AZURE_SUBSCRIPTION: node-app-parallel
+            secrets:
+            - AZURE_SERVICE_APP_ID
+            - AZURE_SERVICE_PASSWORD
+            - AZURE_SERVICE_TENANT
+            
+          - action: azure/github-actions/cli@master
+            displayName: Swap staging to production
+            env:
+              AZURE_SCRIPT:  az webapp deployment slot swap -g linuxparallelrg -n linuxparalleltest19 --slot staging --target-slot production 
+
+         postRouteTrafficChecks:
+          timeout: 60m
+          samplingInterval: 5m
+          steps:          
+          - task: appInsightsAlerts  
+          
+         onFailure:
+          steps:
+          - action: azure/github-actions/login@master
+            displayName: Azure Login node-app-parallel
+            env:
+              AZURE_SUBSCRIPTION: node-app-parallel
+            secrets:
+            - AZURE_SERVICE_APP_ID
+            - AZURE_SERVICE_PASSWORD
+            - AZURE_SERVICE_TENANT
+            
+          - action: azure/github-actions/cli@master
+            displayName: Swap production to staging
+            env:
+              AZURE_SCRIPT:  az webapp deployment slot swap -g linuxparallelrg -n linuxparalleltest19 --slot production --target-slot staging 
